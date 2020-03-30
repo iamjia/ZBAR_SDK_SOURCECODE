@@ -35,7 +35,7 @@
     self = [super init];
     if(!self)
         return(nil);
-
+    
     if(!_reason)
         _reason = @"INFO";
     reason = [_reason retain];
@@ -74,66 +74,68 @@
 - (void) viewDidLoad
 {
     [super viewDidLoad];
-
+    
     UIView *view = self.view;
     CGRect bounds = self.view.bounds;
     if(!bounds.size.width || !bounds.size.height)
         view.frame = bounds = CGRectMake(0, 0, 320, 480);
     view.backgroundColor = [UIColor colorWithWhite: .125f
-                                    alpha: 1];
+                                             alpha: 1];
     view.autoresizingMask = (UIViewAutoresizingFlexibleWidth |
                              UIViewAutoresizingFlexibleHeight);
-
-    webView = [[UIWebView alloc]
-                  initWithFrame: CGRectMake(0, 0,
-                                            bounds.size.width,
-                                            bounds.size.height - 44)];
-    webView.delegate = self;
+    
+    WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+    webView = [[WKWebView alloc]
+               initWithFrame: CGRectMake(0, 0,
+                                         bounds.size.width,
+                                         bounds.size.height - 44) configuration:config];
+    webView.UIDelegate = self;
+    webView.navigationDelegate = self;
     webView.backgroundColor = [UIColor colorWithWhite: .125f
-                                       alpha: 1];
+                                                alpha: 1];
     webView.autoresizingMask = (UIViewAutoresizingFlexibleWidth |
                                 UIViewAutoresizingFlexibleHeight |
                                 UIViewAutoresizingFlexibleBottomMargin);
     webView.hidden = YES;
     [view addSubview: webView];
-
+    
     toolbar = [[UIToolbar alloc]
-                  initWithFrame: CGRectMake(0, bounds.size.height - 44,
-                                            bounds.size.width, 44)];
+               initWithFrame: CGRectMake(0, bounds.size.height - 44,
+                                         bounds.size.width, 44)];
     toolbar.barStyle = UIBarStyleBlackOpaque;
     toolbar.autoresizingMask = (UIViewAutoresizingFlexibleWidth |
                                 UIViewAutoresizingFlexibleHeight |
                                 UIViewAutoresizingFlexibleTopMargin);
-
+    
     doneBtn = [[UIBarButtonItem alloc]
-                  initWithBarButtonSystemItem: UIBarButtonSystemItemDone
-                  target: self
-                  action: @selector(dismiss)];
-
+               initWithBarButtonSystemItem: UIBarButtonSystemItemDone
+               target: self
+               action: @selector(dismiss)];
+    
     backBtn = [[UIBarButtonItem alloc]
-                  initWithImage: [UIImage imageNamed: @"zbar-back.png"]
-                  style: UIBarButtonItemStylePlain
-                  target: webView
-                  action: @selector(goBack)];
-
+               initWithImage: [UIImage imageNamed: @"zbar-back.png"]
+               style: UIBarButtonItemStylePlain
+               target: webView
+               action: @selector(goBack)];
+    
     space = [[UIBarButtonItem alloc]
-                initWithBarButtonSystemItem:
-                    UIBarButtonSystemItemFlexibleSpace
-                target: nil
-                action: nil];
-
+             initWithBarButtonSystemItem:
+             UIBarButtonSystemItemFlexibleSpace
+             target: nil
+             action: nil];
+    
     toolbar.items = [NSArray arrayWithObjects: space, doneBtn, nil];
-
+    
     [view addSubview: toolbar];
-
+    
     NSString *path = [[NSBundle mainBundle]
-                         pathForResource: @"zbar-help"
-                         ofType: @"html"];
-
+                      pathForResource: @"zbar-help"
+                      ofType: @"html"];
+    
     NSURLRequest *req = nil;
     if(path) {
         NSURL *url = [NSURL fileURLWithPath: path
-                            isDirectory: NO];
+                                isDirectory: NO];
         if(url)
             req = [NSURLRequest requestWithURL: url];
     }
@@ -154,14 +156,16 @@
     assert(webView);
     if(webView.loading)
         webView.hidden = YES;
-    webView.delegate = self;
+    webView.UIDelegate = self;
+    webView.navigationDelegate = self;
     [super viewWillAppear: animated];
 }
 
 - (void) viewWillDisappear: (BOOL) animated
 {
     [webView stopLoading];
-    webView.delegate = nil;
+    webView.UIDelegate = nil;
+    webView.navigationDelegate = nil;
     [super viewWillDisappear: animated];
 }
 
@@ -210,19 +214,19 @@
         [self dismissModalViewControllerAnimated: YES];
 }
 
-- (void) webViewDidFinishLoad: (UIWebView*) view
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
 {
-    if(view.hidden) {
-        [view stringByEvaluatingJavaScriptFromString:
-            [NSString stringWithFormat:
-                @"onZBarHelp({reason:\"%@\"});", reason]];
+    if(webView.hidden) {
+        [webView evaluateJavaScript:[NSString stringWithFormat:
+                                     @"onZBarHelp({reason:\"%@\"});", reason] completionHandler:nil];
         [UIView beginAnimations: @"ZBarHelp"
-                context: nil];
-        view.hidden = NO;
+                        context: nil];
+        webView.hidden = NO;
         [UIView commitAnimations];
     }
-
-    BOOL canGoBack = [view canGoBack];
+    
+    BOOL canGoBack = [webView canGoBack];
     NSArray *items = toolbar.items;
     if(canGoBack != ([items objectAtIndex: 0] == backBtn)) {
         if(canGoBack)
@@ -234,26 +238,30 @@
     }
 }
 
-- (BOOL)             webView: (UIWebView*) view
-  shouldStartLoadWithRequest: (NSURLRequest*) req
-              navigationType: (UIWebViewNavigationType) nav
+- (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
 {
-    NSURL *url = [req URL];
+    if (nil == decisionHandler) {
+        return;
+    }
+    
+    NSURL *url = navigationAction.request.URL;
     if([url isFileURL])
-        return(YES);
-
+        decisionHandler(WKNavigationActionPolicyAllow);
+    return;
+    
     linkURL = [url retain];
     UIAlertView *alert =
-        [[UIAlertView alloc]
-            initWithTitle: @"Open External Link"
-            message: @"Close this application and open link in Safari?"
-            delegate: nil
-            cancelButtonTitle: @"Cancel"
-            otherButtonTitles: @"OK", nil];
+    [[UIAlertView alloc]
+     initWithTitle: @"Open External Link"
+     message: @"Close this application and open link in Safari?"
+     delegate: nil
+     cancelButtonTitle: @"Cancel"
+     otherButtonTitles: @"OK", nil];
     alert.delegate = self;
     [alert show];
     [alert release];
-    return(NO);
+    decisionHandler(WKNavigationActionPolicyCancel);
+    
 }
 
 - (void)     alertView: (UIAlertView*) view
@@ -261,7 +269,7 @@
 {
     if(idx)
         [[UIApplication sharedApplication]
-            openURL: linkURL];
+         openURL: linkURL];
 }
 
 @end
